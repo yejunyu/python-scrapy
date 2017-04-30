@@ -6,9 +6,10 @@ from scrapy.http import Request
 import urlparse
 # from urllib import parse #python3
 import time
-from ArticleSpider.items import JobBoleArticleItem
+from ArticleSpider.items import JobBoleArticleItem, ArticleItemLoader
 from ArticleSpider.utils import common
 import os
+from scrapy.loader import ItemLoader
 
 class JobboleSpider(scrapy.Spider):
     name = "jobbole"
@@ -34,8 +35,6 @@ class JobboleSpider(scrapy.Spider):
     def parse_detail(self,response):
         #实例化一个item对象
         article_item = JobBoleArticleItem()
-
-        front_image_url = response.meta.get("front_image_url","")
         title = response.xpath('//div[@class="entry-header"]/h1/text()').extract_first()
         create_date =  response.xpath('//p[@class="entry-meta-hide-on-mobile"]/text()').extract_first().encode('utf8').replace('\xc2\xb7','').strip()
         praise_nums = response.css('.vote-post-up h10::text').extract_first()
@@ -57,20 +56,37 @@ class JobboleSpider(scrapy.Spider):
         tags = ','.join(tag_list)
 
         #article_item = {}
+        article_item['url'] = response.url
         article_item['url_object_id'] = common.get_md5(response.url)
         article_item['title'] = title
-        article_item['url'] = response.url
         try:
             create_date = datetime.datetime.strptime(create_date,"%Y/%m/%d").date()
         except Exception as e:
             create_date = datetime.datetime.now().date()
         article_item['create_date'] = create_date
+        front_image_url = response.meta.get("front_image_url","")
         article_item['front_image_url'] = [front_image_url]
         article_item['praise_nums'] = praise_nums
         article_item['fav_nums'] = fav_nums
         article_item['comment_nums'] = comment_nums
         article_item['content'] = content
         article_item['tags'] = tags
+        #通过itemloader加载item
+        '''
+        item_loader = ArticleItemLoader(item=JobBoleArticleItem(),response=response)
+        item_loader.add_value('url',response.url)
+        item_loader.add_value('url_object_id',common.get_md5(response.url))
+        item_loader.add_xpath('title','//div[@class="entry-header"]/h1/text()')
+        item_loader.add_xpath('create_date','//p[@class="entry-meta-hide-on-mobile"]/text()')
+        front_image_url = response.meta.get("front_image_url","")
+        item_loader.add_value('front_image_url', [front_image_url])
+        item_loader.add_css('praise_nums', '.vote-post-up h10::text')
+        item_loader.add_css('fav_nums', '.bookmark-btn::text')
+        item_loader.add_css('comment_nums', 'a[href="#article-comment"] span::text')
+        item_loader.add_css('content', 'div.entry')
+        item_loader.add_css('tags', 'p.entry-meta-hide-on-mobile a::text')
+        article_item = item_loader.load_item()
+        '''
         #会传到pipelines里
         yield article_item
 
